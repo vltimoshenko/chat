@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"time"
 
+	"2019_2_IBAT/pkg/pkg/interfaces"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -105,6 +107,7 @@ func (c *Client) writePump() {
 				return
 			}
 
+			fmt.Printf("User accepted message %s\n", string(message))
 			w, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				return
@@ -134,9 +137,17 @@ func (c *Client) writePump() {
 func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	//auth
 	// var id uuid.UUID
-	// authInfo, ok := FromContext(r.Context())
+	authInfo, ok := interfaces.FromContext(r.Context())
+	fmt.Println("User authorized:")
+	fmt.Println(authInfo)
 
-	role := "client"
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// role := "client"
+	role := authInfo.Role
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
@@ -158,9 +169,10 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 		client.hub.channels = append(client.hub.channels, client.channel)
 		client.hub.chanMu.Unlock()
+		fmt.Printf("support created")
 	}
 
-	if role == "user" {
+	if role == "seeker" || role == "employer" {
 		client.hub.chanMu.Lock()
 		for _, ch := range client.hub.channels {
 			if ch.state == "Open" {
@@ -173,6 +185,7 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		client.hub.chanMu.Unlock()
+		fmt.Printf("user created")
 	}
 	//return error if no open channel
 	// Allow collection of memory referenced by the caller by doing all work in
@@ -180,3 +193,5 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	go client.writePump()
 	go client.readPump()
 }
+
+// session-id=e70QW572gMivLgOeQHRnXtSXQJGdkF2k; path=/; domain=localhost; Expires=Sun, 24 Nov 2019 12:16:06 GMT;
