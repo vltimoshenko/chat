@@ -43,31 +43,20 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// Client is a middleman between the websocket connection and the hub.
 type Client struct {
-	hub *Hub
-
-	// The websocket connection.
-	conn *websocket.Conn
-
-	// Buffered channel of outbound messages.
-	send  chan []byte
-	role  string
-	state string
-
+	hub     *Hub
+	conn    *websocket.Conn
+	role    string
 	channel Channel
 }
 
-// readPump pumps messages from the websocket connection to the hub.
-//
-// The application runs readPump in a per-connection goroutine. The application
-// ensures that there is at most one reader on a connection by executing all
-// reads from this goroutine.
 func (c *Client) readPump() {
-	defer func() {
-		c.hub.unregister <- c
-		c.conn.Close()
-	}()
+	// defer func() {
+	// 	c.hub.unregister <- c
+	// 	// fmt.Print("Connection closed")
+	// 	// if c.conn.
+	// 	// c.conn.Close()
+	// }()
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
@@ -80,30 +69,32 @@ func (c *Client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		// c.hub.broadcast <- message
 		fmt.Printf("User write %s", string(message))
 		c.channel.out <- message
 	}
 }
 
-// writePump pumps messages from the hub to the websocket connection.
-//
-// A goroutine running writePump is started for each connection. The
-// application ensures that there is at most one writer to a connection by
-// executing all writes from this goroutine.
 func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
-	defer func() {
-		ticker.Stop()
-		c.conn.Close()
-	}()
+	// defer func() {
+	// 	ticker.Stop()
+	// 	fmt.Print("Connection closed")
+	// 	c.conn.Close()
+	// }()
+
 	for {
 		select {
 		case message, ok := <-c.channel.in:
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if !ok {
-				// The hub closed the channel.
+			if !ok && c.role == "support" {
+				c.channel.in = make(chan []byte)
+				c.channel.state = "Open"
+			}
+
+			if !ok && (c.role == "seeker" || c.role == "employer") {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				c.conn.Close()
+				fmt.Println("Channel is closed")
 				return
 			}
 
@@ -114,14 +105,14 @@ func (c *Client) writePump() {
 			}
 			w.Write(message)
 
-			// Add queued chat messages to the current websocket message.
-			n := len(c.send)
+			n := len(c.channel.in)
 			for i := 0; i < n; i++ {
 				w.Write(newline)
-				w.Write(<-c.send)
+				w.Write(<-c.channel.in)
 			}
 
 			if err := w.Close(); err != nil {
+				fmt.Println("Channel is closed")
 				return
 			}
 		case <-ticker.C:
@@ -133,10 +124,8 @@ func (c *Client) writePump() {
 	}
 }
 
-// serveWs handles websocket requests from the peer.
 func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	//auth
-	// var id uuid.UUID
+
 	authInfo, ok := interfaces.FromContext(r.Context())
 	fmt.Println("User authorized:")
 	fmt.Println(authInfo)
@@ -146,20 +135,18 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// role := "client"
 	role := authInfo.Role
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), role: role}
+	client := &Client{hub: hub, conn: conn, role: role}
 	client.hub.register <- client
 
 	if role == "support" {
 		client.hub.chanMu.Lock()
-		// client.in = make(chan []byte)
-		// client.out = make(chan []byte)
 
 		client.channel = Channel{
 			in:    make(chan []byte),
@@ -174,6 +161,8 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 	if role == "seeker" || role == "employer" {
 		client.hub.chanMu.Lock()
+
+		success := false
 		for _, ch := range client.hub.channels {
 			if ch.state == "Open" {
 				ch.state = "Engaged"
@@ -181,17 +170,21 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 					in:  ch.out,
 					out: ch.in,
 				}
+				success = true
 				break
 			}
 		}
 		client.hub.chanMu.Unlock()
-		fmt.Printf("user created")
+
+		if !success {
+			w.WriteHeader(524)
+			fmt.Printf("no free supports")
+			fmt.Printf("Clients left %d", len(client.hub.clients))
+		} else {
+			fmt.Printf("user created")
+		}
 	}
-	//return error if no open channel
-	// Allow collection of memory referenced by the caller by doing all work in
-	// new goroutines.
+
 	go client.writePump()
 	go client.readPump()
 }
-
-// session-id=e70QW572gMivLgOeQHRnXtSXQJGdkF2k; path=/; domain=localhost; Expires=Sun, 24 Nov 2019 12:16:06 GMT;

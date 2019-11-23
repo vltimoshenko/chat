@@ -19,19 +19,6 @@ import (
 
 var addr = flag.String("addr", ":8090", "http service address")
 
-// func serveHome(w http.ResponseWriter, r *http.Request) {
-// 	log.Println(r.URL)
-// 	if r.URL.Path != "/" {
-// 		http.Error(w, "Not found", http.StatusNotFound)
-// 		return
-// 	}
-// 	if r.Method != "GET" {
-// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-// 		return
-// 	}
-// 	http.ServeFile(w, r, "home.html")
-// }
-
 func main() {
 	flag.Parse()
 	router := mux.NewRouter()
@@ -46,15 +33,13 @@ func main() {
 	}
 
 	sessManager := session.NewServiceClient(grcpConn)
-	// AccessLogOut := new(middleware.AccessLogger)
-	// AccessLogOut.StdLogger = log.New(os.Stdout, "STD ", log.LUTC|log.Lshortfile)
 	authMiddleware := middleware.AuthMiddlewareGenerator(sessManager)
+
 	fmt.Println(authMiddleware)
 	router.Use(authMiddleware)
 
 	hub := newHub()
 	go hub.run()
-	// router.HandleFunc("/", serveHome)
 	router.HandleFunc("/chat", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(hub, w, r)
 	})

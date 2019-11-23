@@ -4,7 +4,10 @@
 
 package main
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 // Hub maintains the set of active clients and broadcasts messages to the
 // clients.
@@ -16,20 +19,16 @@ type Channel struct {
 }
 
 type Hub struct {
-	// Registered clients.
 	clients  map[*Client]bool
 	supports map[*Client]bool
 
-	// Inbound messages from the clients.
 	broadcast chan []byte
 
 	chanMu   sync.Mutex
 	channels []Channel
 
-	// Register requests from the clients.
 	register chan *Client
 
-	// Unregister requests from clients.
 	unregister chan *Client
 }
 
@@ -58,25 +57,19 @@ func (h *Hub) run() {
 			switch client.role {
 			case "support":
 				if _, ok := h.supports[client]; ok {
+					fmt.Println("Support logged out")
+					client.hub.chanMu.Lock()
 					delete(h.supports, client)
-					close(client.send)
+					close(client.channel.in)
 				}
 			default:
 				if _, ok := h.clients[client]; ok {
+					fmt.Println("Client logged out")
+					// client.channel.state = "Close"
 					delete(h.clients, client)
-					close(client.send)
+					close(client.channel.in)
 				}
 			}
-
-			// case message := <-h.broadcast:
-			// 	for client := range h.clients {
-			// 		select {
-			// 		case client.send <- message:
-			// 		default:
-			// 			close(client.send)
-			// 			delete(h.clients, client)
-			// 		}
-			// 	}
 		}
 	}
 }
