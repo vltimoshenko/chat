@@ -10,11 +10,7 @@ import (
 	"log"
 	"net/http"
 
-	"2019_2_IBAT/pkg/pkg/auth/session"
-	"2019_2_IBAT/pkg/pkg/middleware"
-
 	"github.com/gorilla/mux"
-	"google.golang.org/grpc"
 )
 
 var addr = flag.String("addr", ":8090", "http service address")
@@ -36,20 +32,20 @@ func main() {
 	flag.Parse()
 	router := mux.NewRouter()
 
-	grcpConn, err := grpc.Dial(
-		"127.0.0.1:8081",
-		grpc.WithInsecure(),
-	)
-	if err != nil {
-		log.Fatalf("cant connect to grpc")
-		// return router, err
-	}
+	// grcpConn, err := grpc.Dial(
+	// 	"127.0.0.1:8081",
+	// 	grpc.WithInsecure(),
+	// )
+	// if err != nil {
+	// 	log.Fatalf("cant connect to grpc")
+	// 	// return router, err
+	// }
 
-	sessManager := session.NewServiceClient(grcpConn)
+	// sessManager := session.NewServiceClient(grcpConn)
 	// AccessLogOut := new(middleware.AccessLogger)
 	// AccessLogOut.StdLogger = log.New(os.Stdout, "STD ", log.LUTC|log.Lshortfile)
-	authMiddleware := middleware.AuthMiddlewareGenerator(sessManager)
-	fmt.Println(authMiddleware)
+	// authMiddleware := middleware.AuthMiddlewareGenerator(sessManager)
+	// fmt.Println(authMiddleware)
 	// router.Use(authMiddleware)
 
 	hub := newHub()
@@ -60,7 +56,7 @@ func main() {
 	})
 
 	fmt.Printf("Chat addres %s", *addr)
-	err = http.ListenAndServe(*addr, router)
+	err := http.ListenAndServe(*addr, router)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
