@@ -25,7 +25,7 @@ type Hub struct {
 	broadcast chan []byte
 
 	chanMu   sync.Mutex
-	channels []Channel
+	channels []*Channel
 
 	register chan *Client
 
@@ -35,7 +35,7 @@ type Hub struct {
 func newHub() *Hub {
 	return &Hub{
 		broadcast: make(chan []byte),
-		channels:  make([]Channel, 0),
+		channels:  make([]*Channel, 0),
 
 		register:   make(chan *Client),
 		unregister: make(chan *Client),

@@ -17,16 +17,9 @@ import (
 )
 
 const (
-	// Time allowed to write a message to the peer.
-	writeWait = 10 * time.Second
-
-	// Time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
-
-	// Send pings to peer with this period. Must be less than pongWait.
-	pingPeriod = (pongWait * 9) / 10
-
-	// Maximum message size allowed from peer.
+	writeWait      = 10 * time.Second
+	pongWait       = 60 * time.Second
+	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 512
 )
 
@@ -47,7 +40,7 @@ type Client struct {
 	hub     *Hub
 	conn    *websocket.Conn
 	role    string
-	channel Channel
+	channel *Channel
 }
 
 func (c *Client) readPump() {
@@ -148,7 +141,7 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	if role == "support" {
 		client.hub.chanMu.Lock()
 
-		client.channel = Channel{
+		client.channel = &Channel{
 			in:    make(chan []byte),
 			out:   make(chan []byte),
 			state: "Open",
@@ -166,7 +159,9 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		for _, ch := range client.hub.channels {
 			if ch.state == "Open" {
 				ch.state = "Engaged"
-				client.channel = Channel{
+
+				fmt.Printf("Channel state switched, now %s\n", ch.state)
+				client.channel = &Channel{
 					in:  ch.out,
 					out: ch.in,
 				}
@@ -179,7 +174,8 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		if !success {
 			w.WriteHeader(524)
 			fmt.Printf("no free supports")
-			fmt.Printf("Clients left %d", len(client.hub.clients))
+			// fmt.Printf("Clients left %d", len(client.hub.clients))
+			return
 		} else {
 			fmt.Printf("user created")
 		}
